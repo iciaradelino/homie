@@ -13,10 +13,12 @@ import {
   Star,
   Clock,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function HomePage() {
@@ -115,9 +117,21 @@ export default function HomePage() {
                     </Select>
                   </div>
                 </div>
-                <Button className="w-full h-12 text-base bg-homie hover:bg-homie-dark">
-                  Search Apartments
-                </Button>
+                <div className="mt-6">
+                  <label className="flex items-center gap-2 text-sm font-medium mb-2">
+                    <FileText className="h-4 w-4 text-homie" />
+                    Additional Requirements
+                  </label>
+                  <Textarea 
+                    placeholder="Describe any specific requirements or preferences (e.g., 'Looking for a quiet apartment with lots of natural light, close to public transport, pet-friendly...')"
+                    className="bg-white resize-none"
+                  />
+                </div>
+                <Link href="/search" className="block mt-6">
+                  <Button className="w-full h-12 text-base bg-homie hover:bg-homie-dark">
+                    Search Apartments
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
