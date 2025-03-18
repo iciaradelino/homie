@@ -9,7 +9,8 @@ import {
   MapPin,
   Home as HomeIcon,
   Heart,
-  Share2
+  Share2,
+  Home,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -72,13 +73,17 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="border-b bg-white sticky top-0 z-50">
-        <div className="container mx-auto">
-          <div className="flex h-16 items-center justify-between">
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-2 text-homie hover:text-homie-dark">
-              <HomeIcon className="h-6 w-6" />
+              <Home className="h-6 w-6" />
               <span className="text-xl font-semibold">Homie</span>
             </Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="#" className="text-sm font-medium hover:text-homie">Sign In</Link>
+            <Button className="bg-homie text-white hover:bg-homie-dark">Sign Up</Button>
           </div>
         </div>
       </header>

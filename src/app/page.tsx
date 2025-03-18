@@ -117,6 +117,50 @@ export default function HomePage() {
                     </Select>
                   </div>
                 </div>
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium mb-2">
+                    <FileText className="h-4 w-4 text-homie" />
+                    Common requirements
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Pet friendly
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Silent location
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Natural light
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Heating
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Garage
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Laundry
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Kitchen amenities
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Balcony
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      Concierge
+                    </label>
+                  </div>
+                </div>
                 <div className="mt-6">
                   <label className="flex items-center gap-2 text-sm font-medium mb-2">
                     <FileText className="h-4 w-4 text-homie" />
