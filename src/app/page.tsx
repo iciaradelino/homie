@@ -1,5 +1,8 @@
-import React from 'react'
+'use client';
+
+import React, { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { 
   Search, 
   Home, 
@@ -21,7 +24,65 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
+// Update keys for common requirements based on API mapping
+type CommonRequirementKey =
+  | 'garage'
+  | 'kitchenAmenities'
+  | 'balcony'
+  | 'lift'
+  | 'furnished'
+  | 'ac'
+  | 'terrace'
+  | 'pool';
+// Removed: 'petFriendly', 'silentLocation', 'naturalLight', 'heating', 'laundry', 'concierge'
+
 export default function HomePage() {
+  const router = useRouter();
+
+  // --- State Variables ---
+  const [location, setLocation] = useState('');
+  const [priceRange, setPriceRange] = useState('');
+  const [bedrooms, setBedrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('');
+  const [commonRequirements, setCommonRequirements] = useState<Record<CommonRequirementKey, boolean>>({
+    garage: false,
+    kitchenAmenities: false,
+    balcony: false,
+    lift: false,
+    furnished: false,
+    ac: false,
+    terrace: false,
+    pool: false,
+  });
+  const [additionalRequirements, setAdditionalRequirements] = useState('');
+
+  // --- Handlers ---
+  const handleCommonRequirementChange = (key: CommonRequirementKey, checked: boolean) => {
+    setCommonRequirements(prev => ({ ...prev, [key]: checked }));
+  };
+
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+
+    if (location) params.set('location', location);
+    if (priceRange && priceRange !== 'any') params.set('priceRange', priceRange);
+    if (bedrooms && bedrooms !== 'any') params.set('bedrooms', bedrooms);
+    if (bathrooms && bathrooms !== 'any') params.set('bathrooms', bathrooms);
+
+    // Add common requirements if checked
+    Object.entries(commonRequirements).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, 'true');
+      }
+    });
+    
+    // Add additional requirements (though the API doesn't filter by this yet)
+    if (additionalRequirements) params.set('additional', additionalRequirements);
+
+    // Navigate to search page with query parameters
+    router.push(`/search?${params.toString()}`);
+  };
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
@@ -63,6 +124,8 @@ export default function HomePage() {
                     type="text" 
                     placeholder="Enter city, neighborhood, or address" 
                     className="pl-10 h-12 text-base focus:ring-homie focus:border-homie bg-white"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
                   />
                 </div>
                 <div className="grid grid-cols-3 gap-4">
@@ -71,15 +134,16 @@ export default function HomePage() {
                       <DollarSign className="h-4 w-4 text-homie" />
                       Price Range
                     </label>
-                    <Select>
+                    <Select value={priceRange} onValueChange={setPriceRange}>
                       <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Any price" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="any">Any price</SelectItem>
                         <SelectItem value="500-1000">€500 - €1,000</SelectItem>
                         <SelectItem value="1000-1500">€1,000 - €1,500</SelectItem>
                         <SelectItem value="1500-2000">€1,500 - €2,000</SelectItem>
-                        <SelectItem value="2000+">€2,000+</SelectItem>
+                        <SelectItem value="2000-">€2,000+</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -88,15 +152,16 @@ export default function HomePage() {
                       <BedDouble className="h-4 w-4 text-homie" />
                       Bedrooms
                     </label>
-                    <Select>
+                    <Select value={bedrooms} onValueChange={setBedrooms}>
                       <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Any" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="any">Any</SelectItem>
                         <SelectItem value="studio">Studio</SelectItem>
                         <SelectItem value="1">1 Bedroom</SelectItem>
                         <SelectItem value="2">2 Bedrooms</SelectItem>
-                        <SelectItem value="3">3+ Bedrooms</SelectItem>
+                        <SelectItem value="3+">3+ Bedrooms</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -105,14 +170,15 @@ export default function HomePage() {
                       <Bath className="h-4 w-4 text-homie" />
                       Bathrooms
                     </label>
-                    <Select>
+                    <Select value={bathrooms} onValueChange={setBathrooms}>
                       <SelectTrigger className="bg-white">
                         <SelectValue placeholder="Any" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="any">Any</SelectItem>
                         <SelectItem value="1">1 Bathroom</SelectItem>
                         <SelectItem value="1.5">1.5 Bathrooms</SelectItem>
-                        <SelectItem value="2">2+ Bathrooms</SelectItem>
+                        <SelectItem value="2+">2+ Bathrooms</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -124,40 +190,52 @@ export default function HomePage() {
                   </label>
                   <div className="grid grid-cols-3 gap-3">
                     <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Pet friendly
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Silent location
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Natural light
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Heating
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.garage}
+                             onChange={(e) => handleCommonRequirementChange('garage', e.target.checked)} />
                       Garage
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Laundry
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.kitchenAmenities}
+                             onChange={(e) => handleCommonRequirementChange('kitchenAmenities', e.target.checked)} />
+                      Kitchen Equipped
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Kitchen amenities
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.balcony}
+                             onChange={(e) => handleCommonRequirementChange('balcony', e.target.checked)} />
                       Balcony
                     </label>
                     <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
-                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie" />
-                      Concierge
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.lift}
+                             onChange={(e) => handleCommonRequirementChange('lift', e.target.checked)} />
+                      Lift
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.furnished}
+                             onChange={(e) => handleCommonRequirementChange('furnished', e.target.checked)} />
+                      Furnished
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.ac}
+                             onChange={(e) => handleCommonRequirementChange('ac', e.target.checked)} />
+                      Air Conditioning
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.terrace}
+                             onChange={(e) => handleCommonRequirementChange('terrace', e.target.checked)} />
+                      Terrace
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                      <input type="checkbox" className="rounded border-gray-300 text-homie focus:ring-homie"
+                             checked={commonRequirements.pool}
+                             onChange={(e) => handleCommonRequirementChange('pool', e.target.checked)} />
+                      Swimming Pool
                     </label>
                   </div>
                 </div>
@@ -169,13 +247,16 @@ export default function HomePage() {
                   <Textarea 
                     placeholder="Describe any specific requirements or preferences (e.g., 'Looking for a quiet apartment with lots of natural light, close to public transport, pet-friendly...')"
                     className="bg-white resize-none"
+                    value={additionalRequirements}
+                    onChange={(e) => setAdditionalRequirements(e.target.value)}
                   />
                 </div>
-                <Link href="/search" className="block mt-6">
-                  <Button className="w-full h-12 text-base bg-homie hover:bg-homie-dark">
-                    Search Apartments
-                  </Button>
-                </Link>
+                <Button 
+                  className="w-full h-12 text-base bg-homie hover:bg-homie-dark"
+                  onClick={handleSearch}
+                >
+                  Search Apartments
+                </Button>
               </div>
             </div>
           </div>
@@ -344,6 +425,14 @@ export default function HomePage() {
                   <Link href="#" className="text-sm text-gray-500 hover:text-homie">About</Link>
                   <Link href="#" className="text-sm text-gray-500 hover:text-homie">Careers</Link>
                   <Link href="#" className="text-sm text-gray-500 hover:text-homie">Contact</Link>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-medium mb-4">Resources</h3>
+                <div className="flex flex-col gap-2">
+                  <Link href="#" className="text-sm text-gray-500 hover:text-homie">Blog</Link>
+                  <Link href="#" className="text-sm text-gray-500 hover:text-homie">Guides</Link>
+                  <Link href="#" className="text-sm text-gray-500 hover:text-homie">FAQ</Link>
                 </div>
               </div>
               <div>
