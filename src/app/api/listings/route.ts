@@ -42,142 +42,177 @@ interface HouseData {
   [key: string]: any; 
 }
 
-export async function GET(request: NextRequest) {
+// --- Cache for parsed data ---
+let allListings: HouseData[] = [];
+let isDataLoaded = false;
+let dataLoadError: string | null = null;
+
+function loadAndParseData() {
+  if (isDataLoaded) return; // Only load once
+
   const csvFilePath = path.resolve('.', 'houses_Madrid.csv');
-
   try {
+    console.log(`[API Init] Reading CSV from: ${csvFilePath}`);
     const fileContent = fs.readFileSync(csvFilePath, { encoding: 'utf-8' });
-
+    console.log(`[API Init] Parsing CSV data...`);
     const parseResult = Papa.parse<HouseData>(fileContent, {
       header: true,
-      dynamicTyping: true, 
+      dynamicTyping: true,
       skipEmptyLines: true,
     });
 
     if (parseResult.errors.length > 0) {
-      // Log first few errors for better debugging
-      console.error("CSV Parsing Errors (first 5):", parseResult.errors.slice(0, 5));
-      return NextResponse.json({ error: 'Failed to parse CSV data', details: parseResult.errors.slice(0, 5) }, { status: 500 });
+      console.error("[API Init] CSV Parsing Errors:", parseResult.errors.slice(0, 5));
+      throw new Error('Failed to parse CSV data');
     }
 
-    let data = parseResult.data;
-
-    // --- Filtering Logic (Updated for new columns) --- 
-    const { searchParams } = request.nextUrl;
-
-    // REMOVED: Filter for operation === 'rent' (assuming new dataset is rentals)
-    // data = data.filter(item => item.operation && item.operation.toLowerCase() === 'rent');
-
-    // Location Filter (using location, district, subdistrict)
-    const locationQuery = searchParams.get('location')?.toLowerCase();
-    if (locationQuery) {
-      console.log(`[API DEBUG] Searching for location: "${locationQuery}"`); 
-      data = data.filter(item => { 
-        const locationLower = item.location?.toLowerCase();
-        const districtLower = item.district?.toLowerCase();
-        const subdistrictLower = item.subdistrict?.toLowerCase();
-
-        const isMatch = 
-          (locationLower && locationLower.includes(locationQuery)) ||
-          (districtLower && districtLower.includes(locationQuery)) ||
-          (subdistrictLower && subdistrictLower.includes(locationQuery));
-
-        // Optional: Keep logging for a few items if needed
-        // if (checkedCount < maxLogItems) { ... }
-        
-        return isMatch;
-      });
-    }
-
-    // Price Range Filter (using 'price')
-    const priceRange = searchParams.get('priceRange');
-    if (priceRange && priceRange !== 'any') {
-      const [minPriceStr, maxPriceStr] = priceRange.split('-');
-      const minPrice = parseInt(minPriceStr, 10);
-      // Handle cases like "2000-" where maxPriceStr is empty
-      const maxPrice = (maxPriceStr === '' || maxPriceStr === undefined) ? Infinity : parseInt(maxPriceStr, 10);
-
-      if (!isNaN(minPrice)) {
-        data = data.filter(item => {
-          if (item.price === null || item.price === undefined) return false;
-          if (maxPrice === Infinity) {
-            return item.price >= minPrice;
-          } else if (!isNaN(maxPrice)) {
-            return item.price >= minPrice && item.price <= maxPrice;
-          } 
-          return false; 
-        });
-      }
-    }
-
-    // Bedrooms Filter (using 'bedrooms')
-    const bedrooms = searchParams.get('bedrooms');
-    if (bedrooms && bedrooms !== 'any') {
-      if (bedrooms === 'studio') {
-        // Assuming studio means 0 or 1 bedroom in new dataset?
-        data = data.filter(item => item.bedrooms !== null && item.bedrooms <= 1);
-      } else if (bedrooms.endsWith('+')) {
-        const minRooms = parseInt(bedrooms.replace('+', ''), 10);
-        if (!isNaN(minRooms)) {
-          data = data.filter(item => item.bedrooms !== null && item.bedrooms >= minRooms);
-        }
-      } else {
-        const exactRooms = parseInt(bedrooms, 10);
-        if (!isNaN(exactRooms)) {
-          data = data.filter(item => item.bedrooms === exactRooms);
-        }
-      }
-    }
-
-    // Bathrooms Filter (using 'bathrooms')
-    const bathrooms = searchParams.get('bathrooms');
-    if (bathrooms && bathrooms !== 'any') {
-      if (bathrooms.endsWith('+')) {
-        const minBaths = parseFloat(bathrooms.replace('+', ''));
-        if (!isNaN(minBaths)) {
-          data = data.filter(item => item.bathrooms !== null && item.bathrooms >= minBaths);
-        }
-      } else {
-        const exactBaths = parseFloat(bathrooms);
-        if (!isNaN(exactBaths)) {
-          data = data.filter(item => item.bathrooms === exactBaths);
-        }
-      }
-    }
-
-    // Updated Common Requirements Filters for new boolean fields
-    const commonFilters: { param: string; field: keyof HouseData }[] = [
-      // Map existing relevant UI params first
-      { param: 'garage', field: 'garage_included' },
-      { param: 'kitchenAmenities', field: 'equipped_kitchen' },
-      { param: 'balcony', field: 'balcony' },
-      // Add mappings for other boolean fields in the new dataset
-      { param: 'lift', field: 'lift' },
-      { param: 'furnished', field: 'furnished' },
-      { param: 'ac', field: 'air_conditioning' },
-      { param: 'terrace', field: 'terrace' },
-      { param: 'pool', field: 'swimming_pool' },
-      // Add others if needed, e.g.:
-      // { param: 'storeroom', field: 'storeroom' },
-      // { param: 'fittedWardrobes', field: 'fitted_wardrobes' },
-    ];
-
-    commonFilters.forEach(({ param, field }) => {
-      const filterValue = searchParams.get(param);
-      // Keep the logic checking for 'true'
-      if (filterValue === 'true') {
-         // No need for function check as all are direct boolean fields now
-         data = data.filter(item => item[field] === true);
-      }
-    });
-
-    return NextResponse.json(data);
+    allListings = parseResult.data;
+    isDataLoaded = true;
+    dataLoadError = null;
+    console.log(`[API Init] Successfully loaded and parsed ${allListings.length} listings.`);
 
   } catch (error: any) {
-    console.error("Error reading or processing CSV file:", error);
+    console.error("[API Init] Error loading or processing CSV file:", error);
     if (error.code === 'ENOENT') {
-      return NextResponse.json({ error: 'CSV file not found' }, { status: 404 });
+       dataLoadError = 'CSV file not found at expected path.';
+    } else {
+       dataLoadError = `Internal Server Error during data load: ${error.message}`;
     }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    isDataLoaded = false; // Ensure we know loading failed
   }
+}
+
+// --- Load data when the module is first loaded ---
+loadAndParseData();
+
+export async function GET(request: NextRequest) {
+  // Check if data failed to load initially
+  if (!isDataLoaded && dataLoadError) {
+      const status = dataLoadError.includes('not found') ? 404 : 500;
+      return NextResponse.json({ error: dataLoadError }, { status });
+  }
+  if (!isDataLoaded || !allListings) {
+      // Should ideally not happen if loadAndParseData ran, but safeguard
+      return NextResponse.json({ error: 'Data not available' }, { status: 500 });
+  }
+
+  const { searchParams } = request.nextUrl;
+  const listingId = searchParams.get('id');
+
+  // --- Handle Request for a Single Listing ---
+  if (listingId) {
+    const id = parseInt(listingId, 10);
+    if (isNaN(id)) {
+      return NextResponse.json({ error: 'Invalid listing ID format' }, { status: 400 });
+    }
+    console.log(`[API Single] Searching for listing ID: ${id}`);
+    const listing = allListings.find(item => item.web_id === id);
+
+    if (listing) {
+      console.log(`[API Single] Found listing: ${listing.title}`);
+      return NextResponse.json(listing); // Return the single listing object
+    } else {
+      console.log(`[API Single] Listing ID ${id} not found.`);
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 });
+    }
+  }
+
+  // --- If no ID, proceed with Filtering and Pagination Logic ---
+  console.log("[API List] No ID provided, proceeding with filtering/pagination.");
+  let data = [...allListings]; // Start with a copy
+
+  // Location Filter
+  const locationQuery = searchParams.get('location')?.toLowerCase();
+  if (locationQuery) {
+    console.log(`[API Filter] Location: "${locationQuery}"`);
+    data = data.filter(item =>
+      (item.location?.toLowerCase().includes(locationQuery)) ||
+      (item.district?.toLowerCase().includes(locationQuery)) ||
+      (item.subdistrict?.toLowerCase().includes(locationQuery))
+    );
+  }
+
+  // Price Range Filter
+  const priceRange = searchParams.get('priceRange');
+  if (priceRange && priceRange !== 'any') {
+    const [minPriceStr, maxPriceStr] = priceRange.split('-');
+    const minPrice = parseInt(minPriceStr, 10);
+    const maxPrice = (maxPriceStr === '' || maxPriceStr === undefined) ? Infinity : parseInt(maxPriceStr, 10);
+    console.log(`[API Filter] Price Range: min=${minPrice}, max=${maxPrice === Infinity ? 'inf' : maxPrice}`);
+    if (!isNaN(minPrice)) {
+      data = data.filter(item => {
+        if (item.price === null || item.price === undefined) return false;
+        if (maxPrice === Infinity) return item.price >= minPrice;
+        else if (!isNaN(maxPrice)) return item.price >= minPrice && item.price <= maxPrice;
+        return false;
+      });
+    }
+  }
+
+  // Bedrooms Filter
+  const bedrooms = searchParams.get('bedrooms');
+  if (bedrooms && bedrooms !== 'any') {
+     console.log(`[API Filter] Bedrooms: "${bedrooms}"`);
+    if (bedrooms === 'studio') {
+      data = data.filter(item => item.bedrooms !== null && item.bedrooms <= 1); // Adjust logic if needed
+    } else if (bedrooms.endsWith('+')) {
+      const minRooms = parseInt(bedrooms.replace('+', ''), 10);
+      if (!isNaN(minRooms)) data = data.filter(item => item.bedrooms !== null && item.bedrooms >= minRooms);
+    } else {
+      const exactRooms = parseInt(bedrooms, 10);
+      if (!isNaN(exactRooms)) data = data.filter(item => item.bedrooms === exactRooms);
+    }
+  }
+
+  // Bathrooms Filter
+  const bathrooms = searchParams.get('bathrooms');
+  if (bathrooms && bathrooms !== 'any') {
+    console.log(`[API Filter] Bathrooms: "${bathrooms}"`);
+    if (bathrooms.endsWith('+')) {
+      const minBaths = parseFloat(bathrooms.replace('+', ''));
+      if (!isNaN(minBaths)) data = data.filter(item => item.bathrooms !== null && item.bathrooms >= minBaths);
+    } else {
+      const exactBaths = parseFloat(bathrooms);
+      if (!isNaN(exactBaths)) data = data.filter(item => item.bathrooms === exactBaths);
+    }
+  }
+
+  // Common Requirements Filters
+  const commonFilters: { param: string; field: keyof HouseData }[] = [
+    { param: 'garage', field: 'garage_included' },
+    { param: 'kitchenAmenities', field: 'equipped_kitchen' },
+    { param: 'balcony', field: 'balcony' },
+    { param: 'lift', field: 'lift' },
+    { param: 'furnished', field: 'furnished' },
+    { param: 'ac', field: 'air_conditioning' },
+    { param: 'terrace', field: 'terrace' },
+    { param: 'pool', field: 'swimming_pool' },
+    // { param: 'storeroom', field: 'storeroom' },
+    // { param: 'fittedWardrobes', field: 'fitted_wardrobes' },
+  ];
+
+  commonFilters.forEach(({ param, field }) => {
+    const filterValue = searchParams.get(param);
+    if (filterValue === 'true') {
+       console.log(`[API Filter] ${param} (${String(field)}) = true`);
+       data = data.filter(item => item[field] === true);
+    }
+  });
+
+  console.log(`[API Result] Found ${data.length} matching listings.`);
+
+  // --- Pagination Logic ---
+  const total = data.length; // Total matching listings *before* pagination
+  console.log(`[API Result] Found ${total} total matching listings.`);
+
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const limit = parseInt(searchParams.get('limit') || '21', 10); // Default limit (e.g., 3 rows of 7)
+  const startIndex = (page - 1) * limit;
+  const endIndex = page * limit;
+
+  const paginatedData = data.slice(startIndex, endIndex);
+  console.log(`[API Result] Returning page ${page} (limit ${limit}): ${paginatedData.length} listings.`);
+
+  // Return paginated data and total count
+  return NextResponse.json({ listings: paginatedData, total: total });
 } 
