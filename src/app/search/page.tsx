@@ -257,6 +257,70 @@ export default function SearchPage() {
 
         {/* Results */}
         <main className="container mx-auto py-8">
+          {/* Top Matches Section (Only shows if listings exist and not initial load) */}
+          {!loading && listings.length >= 3 && (
+            <section className="mb-8 p-6 bg-homie/5 rounded-lg border border-homie/20">
+              <h2 className="text-xl font-semibold text-homie-dark mb-4">Top Matches For You</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {listings.slice(0, 3).map((apartment: HouseData) => (
+                  // Re-using the same card structure from the main grid
+                  <div key={`${apartment.web_id}-top`} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-full">
+                    <div className="relative h-40 bg-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0">
+                      {/* Placeholder - Consider smaller image or different layout for top matches */}
+                      Image Placeholder
+                      <button className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-full hover:bg-white">
+                        <Heart className="h-4 w-4 text-homie" />
+                      </button>
+                    </div>
+                    <div className="p-3 flex flex-col flex-grow">
+                      <div className="flex justify-between items-start mb-1.5">
+                        <h3 className="text-base font-semibold text-gray-900 truncate flex-1 mr-2" title={apartment.title || 'Untitled'}>{apartment.title || 'Apartment Listing'}</h3>
+                        {apartment.price && (
+                          <span className="text-base font-semibold text-homie whitespace-nowrap">€{apartment.price}/mo</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 text-gray-500 text-xs mb-2 truncate">
+                        <MapPin className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate" title={`${apartment.subdistrict}, ${apartment.district}`}>
+                          {apartment.subdistrict || 'Unknown Sub'}, {apartment.district || 'Unknown District'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600 mb-2">
+                        {apartment.bedrooms !== null && (
+                          <div className="flex items-center gap-1">
+                            <BedDouble className="h-3 w-3 text-gray-500" />
+                            <span>{apartment.bedrooms === 0 ? 'Studio' : `${apartment.bedrooms} bed${apartment.bedrooms !== 1 ? 's' : ''}`}</span>
+                          </div>
+                        )}
+                        {apartment.bathrooms !== null && (
+                          <div className="flex items-center gap-1">
+                            <Bath className="h-3 w-3 text-gray-500" />
+                            <span>{apartment.bathrooms} bath${apartment.bathrooms !== 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {apartment.floor_built !== null && (
+                          <div className="flex items-center gap-1">
+                            <Home className="h-3 w-3 text-gray-500" />
+                            <span>{apartment.floor_built} m²</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Optional: Add fewer/different tags for top matches if needed */}
+                      {/* <div className="flex flex-wrap gap-1 text-xxs text-gray-500 mb-3"> ... </div> */}
+                      <div className="mt-auto pt-2 border-t border-gray-100">
+                        <Link href={`/listing/${apartment.web_id}`} passHref legacyBehavior>
+                          <Button asChild size="sm" className="w-full text-xs">
+                            <a>View Details</a>
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           <div className="mb-6">
             <h1 className="text-2xl font-semibold text-gray-900">
               {loading && !loadingMore ? 'Searching apartments...' : 
