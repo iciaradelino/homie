@@ -14,13 +14,25 @@ import {
   Share2,
   Home,
   Loader2,
-  MessageSquare
+  MessageSquare,
+  SparklesIcon,
+  BedIcon,
+  BathIcon,
+  SquareIcon,
+  Square
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Chatbot from '@/components/Chatbot'
+import { useUser } from '@/context/UserContext'
+import UserAvatar from '@/components/UserAvatar'
+import ProfileModal from '@/components/ProfileModal'
+import { useToast } from '@/hooks/use-toast'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import Image from 'next/image'
 
 // Define the SearchFilters type here, mirroring the one in Chatbot.tsx
 // (or export it from Chatbot.tsx and import it here)
@@ -85,6 +97,8 @@ const LISTINGS_PER_PAGE = 21; // Define limit constant
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isAuthenticated, user } = useUser();
+  const { toast } = useToast();
   
   // --- State Declarations --- 
   const [listings, setListings] = useState<HouseData[]>([]); 
@@ -94,6 +108,7 @@ export default function SearchPage() {
   const [page, setPage] = useState(1); // Current page *to be loaded next*
   const [totalListings, setTotalListings] = useState(0); // Total available
   const [isChatbotOpen, setIsChatbotOpen] = useState(false); // State for chatbot visibility
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // State to hold explanations for top matches { web_id: explanation }
   const [topMatchExplanations, setTopMatchExplanations] = useState<Record<number, string>>({});
@@ -114,236 +129,210 @@ export default function SearchPage() {
   const [inputBathrooms, setInputBathrooms] = useState('any');
   // Add state for other boolean filters if needed for UI controls
 
-  // --- Effects ---
+  // --- Modal Handlers ---
+  const handleCloseProfileModal = () => {
+    setIsProfileModalOpen(false);
+  };
 
-  // Effect 1: Initialize filters from URL on initial load ONLY
+  const handleSignUpClick = () => {
+    setIsProfileModalOpen(true);
+  };
+
+  // --- Effect 1: When search params change (URL), update activeFilters ---
   useEffect(() => {
-    const initialFilters: SearchFilters = {};
-    // Directly use searchParams which is stable
-    const locationParam = searchParams.get('location');
-    const priceRangeParam = searchParams.get('priceRange');
-    const bedroomsParam = searchParams.get('bedrooms');
-    const bathroomsParam = searchParams.get('bathrooms');
+    // This updates our activeFilters based on the URL params
+    const params = Object.fromEntries(searchParams.entries());
+    console.log("URL params changed, updating activeFilters:", params);
+    setActiveFilters(params);
+    
+    // Reset page when search changes
+    setPage(1);
+    setListings([]);
 
-    if (locationParam) initialFilters.location = locationParam;
-    if (priceRangeParam) initialFilters.priceRange = priceRangeParam;
-    if (bedroomsParam) initialFilters.bedrooms = bedroomsParam;
-    if (bathroomsParam) initialFilters.bathrooms = bathroomsParam;
-
-    // Add other filters from searchParams if they exist (example)
-    // if (searchParams.has('garage')) initialFilters.garage = 'true';
-
-    setActiveFilters(initialFilters);
-    console.log("Initialized activeFilters from URL:", initialFilters);
-    // Only depends on searchParams, which is stable from useSearchParams
+    // Also update controlled inputs to match URL params
+    setInputLocation(params.location || '');
+    setInputPriceRange(params.priceRange || 'any');
+    setInputBedrooms(params.bedrooms || 'any');
+    setInputBathrooms(params.bathrooms || 'any');
   }, [searchParams]);
 
-  // Effect 2: Sync input fields when activeFilters change (e.g., due to chatbot or back/forward navigation)
+  // --- Effect 2: When activeFilters change, fetch listings --- (Modified)
   useEffect(() => {
-    setInputLocation(activeFilters.location || '');
-    setInputPriceRange(activeFilters.priceRange || 'any');
-    setInputBedrooms(activeFilters.bedrooms || 'any');
-    setInputBathrooms(activeFilters.bathrooms || 'any');
-     // Sync other input states if added
-  }, [activeFilters]);
-
-  // Define fetchListings using useCallback
-  // Now depends on activeFilters state directly
-  const fetchListings = useCallback(async (isLoadMore = false) => {
-    const currentPageToFetch = isLoadMore ? page : 1; // Use state for load more, 1 for new search
-
-    if (!isLoadMore) {
-      setLoading(true);
-      setListings([]); // Clear existing listings only for a *new* search
-      // Don't reset page here, Effect 3 handles it when filters change
-    } else {
-      setLoadingMore(true);
+    // Don't need this first time, will be triggered by URL params change
+    if (Object.keys(activeFilters).length > 0) {
+      setPage(1); // Reset page number when filters change
+      fetchListings(); // Fetch listings with the new filters
     }
-    setError(null);
+  }, [activeFilters]); // Re-fetch when activeFilters change
 
-    const queryParams = new URLSearchParams();
-    // Build query from activeFilters state
-    Object.entries(activeFilters).forEach(([key, value]) => {
-        // Ensure value is a string and not empty/undefined before setting
-        if (typeof value === 'string' && value !== '' && value !== 'any') {
-             queryParams.set(key, value);
-        } else if (typeof value === 'boolean' && value === true) {
-             queryParams.set(key, 'true'); // Handle boolean filters if added
+  // --- Effect 3: When activeFilters change, update URL --- (Unchanged)
+  useEffect(() => {
+    // Skip on initial render
+    if (Object.keys(activeFilters).length > 0) {
+      console.log("activeFilters changed, updating URL params:", activeFilters);
+      const params = new URLSearchParams();
+      
+      // Add each filter to URL params
+      Object.entries(activeFilters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'any') {
+          params.set(key, value.toString());
         }
+      });
+      
+      // Update URL without reloading page
+      router.push(`/search?${params.toString()}`, { scroll: false });
+    }
+  }, [activeFilters, router]);
+
+  // Function to fetch explanations for top matches (Modified)
+  const fetchExplanations = async (topMatches: HouseData[], currentFilters: SearchFilters) => {
+    // Skip if we already have explanations for these exact listings
+    const topMatchIds = topMatches.map(match => match.web_id).sort();
+    const currentExplainedIds = Object.keys(topMatchExplanations).map(Number).sort();
+    
+    if (JSON.stringify(topMatchIds) === JSON.stringify(currentExplainedIds) && currentExplainedIds.length > 0) {
+      console.log("[fetchExplanations] Skipping, explanations already fetched for these listings.");
+      return; 
+    }
+    
+    setLoadingExplanations(true);
+    setTopMatchExplanations({}); // Clear old explanations
+    console.log(`[fetchExplanations] Fetching AI explanations for top ${topMatches.length} listings...`);
+
+    const explanationPromises = topMatches.map(async (apartment) => {
+      try {
+        const response = await fetch('/api/explain-match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            apartmentData: apartment, // Send full apartment data as needed by the endpoint
+            activeFilters: currentFilters
+          }),
+        });
+
+        if (!response.ok) {
+          console.error(`[API Explain] Failed for ID ${apartment.web_id}: ${response.statusText}`);
+          return { id: apartment.web_id, explanation: "Explanation unavailable." }; // Error placeholder
+        }
+
+        const data = await response.json();
+        return { id: apartment.web_id, explanation: data.explanation || "Could not generate explanation." };
+      } catch (error) {
+        console.error(`[API Explain] Error fetching explanation for ID ${apartment.web_id}:`, error);
+        return { id: apartment.web_id, explanation: "Error fetching explanation." }; // Catch fetch errors
+      }
     });
 
-    queryParams.set('page', currentPageToFetch.toString());
-    queryParams.set('limit', LISTINGS_PER_PAGE.toString());
-
-    const queryString = queryParams.toString();
-    console.log("Fetching listings:", isLoadMore ? "Load More" : "New Search", `page=${currentPageToFetch}`, queryString);
-
     try {
-      const response = await fetch(`/api/listings?${queryString}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`HTTP error! status: ${response.status}, details: ${JSON.stringify(errorData)}`);
-      }
-      const data: { listings: HouseData[], total: number } = await response.json();
+        const explanations = await Promise.all(explanationPromises);
+        const newExplanations: Record<number, string> = {};
+        explanations.forEach(item => {
+            if (item) { // Ensure item is not null/undefined if Promise.allSettled were used
+                newExplanations[item.id] = item.explanation;
+            }
+        });
+        setTopMatchExplanations(newExplanations);
+        console.log("[fetchExplanations] AI Explanations fetched:", newExplanations);
+    } catch (error) {
+        console.error("[fetchExplanations] Error processing explanations:", error);
+    } finally {
+      setLoadingExplanations(false);
+    }
+  };
 
-      setTotalListings(data.total);
+  // Fetch listings function (Modified)
+  const fetchListings = async (isLoadMore = false) => {
+    const currentPage = isLoadMore ? page : 1; // Use current page for load more, 1 otherwise
 
-      if (isLoadMore) {
-        setListings(prev => [...prev, ...data.listings]);
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setError(null);
+      // Reset listings only when it's a new search (not load more)
+      setListings([]); 
+    }
+
+    const usePersonalized = isAuthenticated && user?.lifestyle && Object.keys(user.lifestyle).length > 0;
+    const endpoint = usePersonalized ? '/api/recommendations' : '/api/listings';
+    
+    try {
+      let response;
+      if (usePersonalized) {
+        console.log("[fetchListings] Fetching personalized recommendations...");
+        // Prepare request body for recommendations API
+        const filterObj: Record<string, string> = {};
+        Object.entries(activeFilters).forEach(([key, value]) => {
+          if (value && value !== 'any') {
+            filterObj[key] = value.toString();
+          }
+        });
+        
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userProfile: user,
+            filters: filterObj,
+            // Note: Pagination might need different handling for recommendations API
+            // For now, let's assume it returns enough results or handle pagination server-side
+            limit: 100 // Fetch more initially for recommendations
+          }),
+        });
+
       } else {
-        setListings(data.listings);
+        console.log("[fetchListings] Fetching standard listings...");
+        // Prepare request params for standard listings API
+        const params = new URLSearchParams();
+        params.set('page', currentPage.toString());
+        params.set('limit', LISTINGS_PER_PAGE.toString());
+        Object.entries(activeFilters).forEach(([key, value]) => {
+          if (value && value !== 'any') {
+            params.set(key, value.toString());
+          }
+        });
+        response = await fetch(`${endpoint}?${params.toString()}`);
       }
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText} at ${endpoint}`);
+      }
+      
+      const data = await response.json();
+      
+      // Process results (Handle both API structures)
+      const results = data.recommendations || data.listings || []; // Check both keys
+      const total = data.total || results.length;
 
-      // Increment page number *after* successful fetch for the *next* potential load more
-      setPage(currentPageToFetch + 1);
-
-    } catch (e: any) {
-      console.error("Failed to fetch listings:", e);
-      setError(`Failed to load listings: ${e.message}`);
+      if (Array.isArray(results)) {
+        if (isLoadMore && !usePersonalized) { // Only append for standard listing pagination
+          setListings(prev => [...prev, ...results]);
+        } else {
+          // Replace listings for new search or personalized results
+          setListings(results); 
+           // Fetch explanations for top 3 (if available and filters applied)
+          if (results.length >= 3 && Object.keys(activeFilters).length > 0) {
+            fetchExplanations(results.slice(0, 3), activeFilters);
+          }
+        }
+        
+        setTotalListings(total);
+        
+        // Update page number for next load more (only for standard listings)
+        if (!usePersonalized) {
+          setPage(prev => prev + 1);
+        }
+      } else {
+        throw new Error('Unexpected API response format');
+      }
+    } catch (error) {
+      console.error('Error fetching listings:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error occurred');
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  // Depend on activeFilters and the page *to be loaded next*
-  }, [activeFilters, page]);
-
-  // Function to fetch explanations for top matches
-  const fetchExplanations = async (topMatches: HouseData[], currentFilters: SearchFilters) => {
-      const topMatchIds = topMatches.map(m => m.web_id).sort();
-
-      // --- Prevent unnecessary refetching --- 
-      // Check if we are already loading or if the IDs haven't changed since the last fetch
-      if (loadingExplanations || (lastExplainedListingIds.current.length === topMatchIds.length && lastExplainedListingIds.current.every((id, i) => id === topMatchIds[i]))) {
-          console.log("[Explain Fetch] Skipping fetch: Already loading or IDs haven't changed.");
-          return;
-      }
-      // --- End Prevent unnecessary refetching ---
-
-      if (!topMatches || topMatches.length === 0) {
-          console.log("[Explain Fetch] No top matches to explain.");
-          setLoadingExplanations(false);
-          setTopMatchExplanations({});
-          return;
-      }
-      // Add check for filters
-      if (!currentFilters || Object.keys(currentFilters).length === 0) {
-          console.log("[Explain Fetch] No active filters to base explanation on.");
-           // Decide if you still want to show loading/clear or just do nothing
-          setLoadingExplanations(false);
-          setTopMatchExplanations({}); // Clear explanations if filters disappear
-          return;
-      }
-
-      console.log("[Explain Fetch] Starting explanation generation for top matches:", topMatches.map(m => m.web_id));
-      setLoadingExplanations(true);
-      setTopMatchExplanations({}); // Clear old explanations
-
-      const explanationPromises = topMatches.map(async (match) => {
-          try {
-              // Log before making the fetch call
-              console.log(`[Explain Fetch] Attempting fetch for ID: ${match.web_id} to /api/explain-match`);
-              const response = await fetch('/api/explain-match', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ apartmentData: match, activeFilters: currentFilters }),
-              });
-              if (!response.ok) {
-                  console.error(`[Explain Fetch] Failed for ID ${match.web_id}: ${response.statusText}`);
-                  return { id: match.web_id, explanation: "Unable to load explanation." };
-              }
-              const data = await response.json();
-              return { id: match.web_id, explanation: data.explanation || "" };
-          } catch (error) {
-              console.error(`[Explain Fetch] Error fetching explanation for ID ${match.web_id}:`, error);
-              return { id: match.web_id, explanation: "Error loading explanation." };
-          }
-      });
-
-      const results = await Promise.all(explanationPromises);
-      const newExplanations: Record<number, string> = {};
-      results.forEach(result => {
-          if (result) {
-              newExplanations[result.id] = result.explanation;
-          }
-      });
-
-      console.log("[Explain Fetch] Explanations generated:", newExplanations);
-      setTopMatchExplanations(newExplanations);
-      setLoadingExplanations(false);
-      // Store the IDs for which we just fetched explanations
-      lastExplainedListingIds.current = topMatchIds; 
   };
-
-  // Effect 3: Fetch listings when activeFilters change and update URL
-   useEffect(() => {
-      console.log("activeFilters changed, preparing to fetch and update URL", activeFilters);
-
-      // Reset page to 1 *before* fetching when filters change
-      setPage(1);
-
-      // Fetch immediately with the new filters (page will be 1)
-      // We define an async function inside useEffect to handle the fetch and subsequent explanation fetch
-      const loadListingsAndExplanations = async () => {
-          await fetchListings(false); // Wait for listings to fetch
-          // Access the latest listings state via the setter's callback or refetching logic
-          // For simplicity, we initiate explanation fetch here, but it might run on slightly stale `listings` state
-          // A more robust way might involve another useEffect watching `listings` state specifically.
-          // Let's try triggering it after fetchListings finishes setting state (though state updates are async)
-          // NOTE: This approach has limitations. fetchListings updates state asynchronously.
-          // We'll call fetchExplanations, but it will use the *current* activeFilters
-          // and might capture the listings *before* fetchListings fully updates the state.
-
-          // A better approach: Trigger explanations in a separate useEffect that depends on `listings`
-      };
-
-      loadListingsAndExplanations();
-
-      // Update URL to reflect the new activeFilters
-      const currentParams = new URLSearchParams();
-      Object.entries(activeFilters).forEach(([key, value]) => {
-          if (typeof value === 'string' && value !== '' && value !== 'any') {
-               currentParams.set(key, value);
-          } else if (typeof value === 'boolean' && value === true) {
-               currentParams.set(key, 'true');
-          }
-      });
-       // Use router.replace to update URL without adding to history stack for filter changes
-       // Keep existing pathname, update search query
-      router.replace(`/search?${currentParams.toString()}`, { scroll: false }); // scroll: false prevents jumping to top
-
-      // fetchListings is stable due to useCallback, activeFilters trigger this effect
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeFilters, router]); // Add router dependency
-
-  // Effect 4: Fetch explanations when listings change or filters change
-  useEffect(() => {
-      console.log("[Effect 4] Running: Check if explanations should be fetched.");
-      const hasActiveFilters = Object.keys(activeFilters).length > 0;
-      console.log(`[Effect 4] Listings length: ${listings.length}, Has Active Filters:`, hasActiveFilters);
-
-      if (hasActiveFilters) {
-          // Filters are active. Should we fetch explanations?
-          if (listings.length > 0) {
-              // Yes, listings are also loaded.
-              const topMatches = listings.slice(0, 3);
-              console.log("[Effect 4] Conditions met (filters & listings present). Calling fetchExplanations.");
-              fetchExplanations(topMatches, activeFilters);
-          } else {
-              // Listings are temporarily empty (likely during a refetch due to filter change).
-              // Do nothing - wait for listings to reload. Keep existing explanations (if any) and loading state.
-              console.log("[Effect 4] Filters present, but listings empty. Waiting for listings to load.");
-          }
-      } else {
-          // No active filters.
-          console.log("[Effect 4] No active filters. Clearing explanations.");
-          // Clear explanations and ensure loading is off.
-          setLoadingExplanations(false);
-          setTopMatchExplanations({});
-      }
-
-      // Depend on the first listing's ID and the filters.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listings[0]?.web_id, JSON.stringify(activeFilters)]);
 
   // Function to handle updating the search from *this* page's filter inputs
   const handleUpdateSearchFromInputs = () => {
@@ -366,27 +355,29 @@ export default function SearchPage() {
   // --- Chatbot Update Handler ---
   const handleChatbotSearchUpdate = (chatbotFilters: SearchFilters) => {
      console.log("Received filters from chatbot:", chatbotFilters);
-     // Merge chatbot filters with existing ones? Or replace?
-     // Let's replace for now, assuming chatbot provides a complete new context
-     const newFilters = { ...chatbotFilters };
+     // Merge chatbot filters with existing activeFilters
+     const mergedFilters = { ...activeFilters, ...chatbotFilters };
 
-     // Remove undefined/empty/any values potentially sent by chatbot API
-     Object.keys(newFilters).forEach(key => {
-         if (newFilters[key] === undefined || newFilters[key] === '' || newFilters[key] === 'any') {
-            delete newFilters[key];
+     // Remove undefined/empty/any values potentially sent by chatbot API or existing filters
+     Object.keys(mergedFilters).forEach(key => {
+         if (mergedFilters[key] === undefined || mergedFilters[key] === '' || mergedFilters[key] === 'any') {
+            delete mergedFilters[key];
          }
      });
 
-     console.log("Updating activeFilters from chatbot:", newFilters);
+     console.log("Updating activeFilters by merging chatbot filters:", mergedFilters);
      // This state update will trigger Effect 3
-     setActiveFilters(newFilters);
+     setActiveFilters(mergedFilters);
      // Optionally close the chatbot after update
      // closeChatbot();
   };
 
-  // Function to handle clicking the "Load More" button
+  // --- Load More Handler --- (Modified to only work for standard search)
   const handleLoadMore = () => {
-     fetchListings(true); // Call fetchListings with isLoadMore flag, uses current page state
+    const canLoadMore = !isAuthenticated || !user?.lifestyle; // Only load more if not personalized
+    if (canLoadMore) {
+       fetchListings(true); 
+    }
   };
 
   // --- Chatbot Visibility Handlers ---
@@ -407,8 +398,24 @@ export default function SearchPage() {
               </Link>
             </div>
             <div className="flex items-center gap-4">
-              <Link href="#" className="text-sm font-medium hover:text-homie">Sign In</Link>
-              <Button className="bg-homie text-white hover:bg-homie-dark">Sign Up</Button>
+              {isAuthenticated ? (
+                <UserAvatar />
+              ) : (
+                <>
+                  <Link href="#" className="text-sm font-medium hover:text-homie" onClick={(e) => {
+                    e.preventDefault();
+                    setIsProfileModalOpen(true);
+                  }}>
+                    Sign In
+                  </Link>
+                  <Button 
+                    className="bg-homie text-white hover:bg-homie-dark" 
+                    onClick={handleSignUpClick}
+                  >
+                    Sign Up
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </header>
@@ -472,13 +479,14 @@ export default function SearchPage() {
 
         {/* Results */}
         <main className="container mx-auto py-8">
-          {/* Top Matches Section (Only shows if listings exist and not initial load) */}
+          {/* Top Matches Section - Use listings state directly */}
           {!loading && listings.length >= 3 && (
             <section className="mb-12 p-6 bg-gradient-to-br from-homie/5 to-homie/10 rounded-lg border border-homie/20 shadow-sm">
-              <h2 className="text-xl font-semibold text-homie-dark mb-6">Top Matches For You</h2>
+              <h2 className="text-xl font-semibold text-homie-dark mb-6">
+                {isAuthenticated && user?.lifestyle ? 'Top Personalized Matches' : 'Top Matches For You'}
+              </h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {listings.slice(0, 3).map((apartment: HouseData) => (
-                  // Re-using the same card structure from the main grid
                   <div key={`${apartment.web_id}-top`} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-full transition-shadow duration-200 hover:shadow-lg">
                     <div className="relative h-48 bg-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0">
                       {/* Placeholder - Consider smaller image or different layout for top matches */}
@@ -488,6 +496,24 @@ export default function SearchPage() {
                       </button>
                     </div>
                     <div className="p-4 flex flex-col flex-grow">
+                      {/* Match score tag for personalized results (Check if matchScore exists) */}
+                      {apartment.matchScore !== undefined && apartment.matchScore > 0 && (
+                        <div className="flex items-center mb-2">
+                          <span 
+                            className={`text-xs font-medium px-2 py-1 rounded-full ${
+                              apartment.matchScore >= 80 ? 'bg-green-100 text-green-800' : 
+                              apartment.matchScore >= 60 ? 'bg-yellow-100 text-yellow-800' : 
+                              'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            <SparklesIcon className="h-3 w-3 inline mr-1" />
+                            {apartment.matchScore >= 80 ? 'Perfect Match' :
+                             apartment.matchScore >= 60 ? 'Good Match' :
+                             'Potential Match'}
+                            {` (${Math.round(apartment.matchScore)}%)`}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="text-lg font-semibold text-gray-900 truncate flex-1 mr-2" title={apartment.title || 'Untitled'}>{apartment.title || 'Apartment Listing'}</h3>
                         {apartment.price && (
@@ -520,19 +546,7 @@ export default function SearchPage() {
                           </div>
                         )}
                       </div>
-                        
-                      <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-4">
-                        {apartment.lift && <span className="bg-gray-100 px-2 py-0.5 rounded">Lift</span>}
-                        {apartment.garage_included && <span className="bg-gray-100 px-2 py-0.5 rounded">Garage</span>}
-                        {apartment.furnished && <span className="bg-gray-100 px-2 py-0.5 rounded">Furnished</span>}
-                        {apartment.equipped_kitchen && <span className="bg-gray-100 px-2 py-0.5 rounded">Kitchen Equipped</span>}
-                        {apartment.air_conditioning && <span className="bg-gray-100 px-2 py-0.5 rounded">A/C</span>}
-                        {apartment.terrace && <span className="bg-gray-100 px-2 py-0.5 rounded">Terrace</span>}
-                        {apartment.balcony && <span className="bg-gray-100 px-2 py-0.5 rounded">Balcony</span>}
-                        {apartment.swimming_pool && <span className="bg-gray-100 px-2 py-0.5 rounded">Pool</span>}
-                      </div>
-
-                      {/* Explanation Section - Only render if activeFilters exist */}
+                      {/* Explanation Section (Use topMatchExplanations state) */}
                       {Object.keys(activeFilters).length > 0 && (
                         <div className="mt-2 mb-3 bg-homie/5 border border-homie/10 rounded-lg p-3">
                           {loadingExplanations ? (
@@ -554,12 +568,12 @@ export default function SearchPage() {
                               </div>
                           ) : (
                               <div className="flex items-center justify-center h-[56px] text-gray-500 italic">
-                                  <span>Explanation unavailable.</span>
+                                  {/* Display placeholder only if not loading and no explanation exists */}
+                                  {!loadingExplanations && <span>Explanation unavailable.</span>}
                               </div>
                           )}
                         </div>
                       )}
-                        
                       <div className="mt-auto">
                         <Link href={`/listing/${apartment.web_id}`} passHref legacyBehavior>
                           <Button asChild className="w-full">
@@ -574,11 +588,15 @@ export default function SearchPage() {
             </section>
           )}
 
+          {/* Results Title */}          
           <div className="mb-6">
             <h1 className="text-2xl font-semibold text-gray-900">
               {loading && !loadingMore ? 'Searching apartments...' : 
                error ? 'Error loading results' : 
                `${totalListings} apartment${totalListings !== 1 ? 's' : ''} found`
+              }
+              {isAuthenticated && user?.lifestyle && !loading && totalListings > 0 && 
+                <span className="text-base font-normal text-homie ml-2">(Personalized for you)</span>
               }
             </h1>
             {!loading && !error && totalListings > 0 && 
@@ -589,160 +607,154 @@ export default function SearchPage() {
             }
           </div>
 
-          {/* Loading State (Only show for initial load/filter update) */}
-          {loading && !loadingMore && (
-            <div className="flex justify-center items-center py-20">
-              <Loader2 className="h-12 w-12 animate-spin text-homie" />
-            </div>
-          )}
-
-          {/* Error State */}
-          {error && !loading && !loadingMore && ( // Don't show full error block if just load more failed
-            <div className="text-center py-10 px-4 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-red-700 font-semibold">Error Loading Results</p>
-              <p className="text-red-600 text-sm mt-1">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => fetchListings(false)} className="mt-4"> 
-                 Try Again
-              </Button>
-            </div>
-          )}
-          {/* Optional: Smaller error indicator if load more fails */}
-          {error && loadingMore && <p className="text-center text-red-600 text-sm py-2">Failed to load more listings.</p>}
-
-          {/* Results Grid */}
-          {listings.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {listings.map((apartment: HouseData) => (
-                <div key={apartment.web_id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
-                  <div className="relative h-48 bg-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0">
-                    Image Placeholder
-                    <button className="absolute top-4 right-4 p-2 bg-white/90 rounded-full hover:bg-white">
-                      <Heart className="h-5 w-5 text-homie" />
-                    </button>
-                  </div>
-                  <div className="p-4 flex flex-col flex-grow">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900 truncate flex-1 mr-2" title={apartment.title || 'Untitled'}>{apartment.title || 'Apartment Listing'}</h3>
-                      {apartment.price && (
-                        <span className="text-lg font-semibold text-homie whitespace-nowrap">€{apartment.price}/mo</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-500 text-sm mb-3 truncate">
-                      <MapPin className="h-4 w-4 flex-shrink-0" />
-                      <span className="truncate" title={`${apartment.subdistrict}, ${apartment.district}`}>
-                        {apartment.subdistrict || 'Unknown Sub'}, {apartment.district || 'Unknown District'}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mb-3">
-                      {apartment.bedrooms !== null && (
-                        <div className="flex items-center gap-1">
-                          <BedDouble className="h-4 w-4 text-gray-500" />
-                          <span>{apartment.bedrooms === 0 ? 'Studio' : `${apartment.bedrooms} bed${apartment.bedrooms !== 1 ? 's' : ''}`}</span>
-                        </div>
-                      )}
-                      {apartment.bathrooms !== null && (
-                        <div className="flex items-center gap-1">
-                          <Bath className="h-4 w-4 text-gray-500" />
-                          <span>{apartment.bathrooms} bath${apartment.bathrooms !== 1 ? 's' : ''}</span>
-                        </div>
-                      )}
-                      {apartment.floor_built !== null && (
-                        <div className="flex items-center gap-1">
-                          <Home className="h-4 w-4 text-gray-500" />
-                          <span>{apartment.floor_built} m²</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs text-gray-500 mb-4">
-                      {apartment.lift && <span className="bg-gray-100 px-2 py-0.5 rounded">Lift</span>}
-                      {apartment.garage_included && <span className="bg-gray-100 px-2 py-0.5 rounded">Garage</span>}
-                      {apartment.furnished && <span className="bg-gray-100 px-2 py-0.5 rounded">Furnished</span>}
-                      {apartment.equipped_kitchen && <span className="bg-gray-100 px-2 py-0.5 rounded">Kitchen Equipped</span>}
-                      {apartment.air_conditioning && <span className="bg-gray-100 px-2 py-0.5 rounded">A/C</span>}
-                      {apartment.terrace && <span className="bg-gray-100 px-2 py-0.5 rounded">Terrace</span>}
-                      {apartment.balcony && <span className="bg-gray-100 px-2 py-0.5 rounded">Balcony</span>}
-                      {apartment.swimming_pool && <span className="bg-gray-100 px-2 py-0.5 rounded">Pool</span>}
-                    </div>
-
-                    {/* Explanation Section - Only render if activeFilters exist */}
-                    {Object.keys(activeFilters).length > 0 && (
-                      <div className="mt-2 mb-3 bg-homie/5 border border-homie/10 rounded-lg p-3">
-                        {loadingExplanations ? (
-                            <div className="flex items-center justify-center h-[56px] text-gray-500 italic">
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin"/>
-                                <span>Finding perfect match...</span>
-                            </div>
-                        ) : topMatchExplanations[apartment.web_id] ? (
-                            <div>
-                                <div className="flex items-center gap-1.5 mb-1.5">
-                                    <div className="bg-homie/20 rounded-full p-1">
-                                        <Heart className="h-3.5 w-3.5 text-homie" />
-                                    </div>
-                                    <p className="text-sm font-medium text-homie">Why this is a great match</p>
-                                </div>
-                                <p className="text-sm text-gray-700 leading-tight">
-                                    {topMatchExplanations[apartment.web_id]}
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="flex items-center justify-center h-[56px] text-gray-500 italic">
-                                <span>Explanation unavailable.</span>
-                            </div>
-                        )}
-                      </div>
-                    )}
-                        
-                    <div className="mt-auto">
-                      <Link href={`/listing/${apartment.web_id}`} passHref legacyBehavior>
-                        <Button asChild className="w-full">
-                          <a>View Details</a>
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Load More Button */}
-          <div className="mt-8 text-center">
-            {!loading && !error && listings.length > 0 && listings.length < totalListings && (
+          {/* Main Grid */}
+          {error ? (
+            <div className="text-center py-10">
+              <p className="text-red-500 mb-2">{error}</p>
               <Button 
-                onClick={handleLoadMore} 
-                disabled={loadingMore}
-                variant="outline"
+                variant="outline" 
+                onClick={() => fetchListings()} 
+                className="mt-4"
               >
-                {loadingMore ? (
-                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
-                ) : (
-                   'Load More Results'
-                )}
+                Try Again
               </Button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {loading && !loadingMore ? (
+                  // Loading placeholders
+                  [...Array(6)].map((_, i) => (
+                    <div key={i} className="bg-gray-100 rounded-lg shadow-sm h-96 animate-pulse flex flex-col">
+                      <div className="h-48 bg-gray-200 rounded-t-lg"></div>
+                      <div className="p-4 space-y-4 flex-grow">
+                        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                        <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                        <div className="flex gap-2">
+                          <div className="h-3 bg-gray-200 rounded w-12"></div>
+                          <div className="h-3 bg-gray-200 rounded w-12"></div>
+                          <div className="h-3 bg-gray-200 rounded w-12"></div>
+                        </div>
+                        <div className="mt-auto pt-4">
+                          <div className="h-10 bg-gray-200 rounded"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // Actual apartment cards (skip first 3 if shown in top matches)
+                  listings.slice(listings.length >= 3 ? 3 : 0).map((apartment: HouseData) => (
+                    <div key={apartment.web_id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col h-full transition-shadow duration-200 hover:shadow-lg">
+                      <div className="relative h-48 bg-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0">
+                        Image Placeholder
+                        <button className="absolute top-4 right-4 p-2 bg-white/90 rounded-full hover:bg-white">
+                          <Heart className="h-5 w-5 text-homie" />
+                        </button>
+                      </div>
+                      <div className="p-4 flex flex-col flex-grow">
+                         {/* Match score tag */}
+                         {apartment.matchScore !== undefined && apartment.matchScore > 0 && (
+                          <div className="flex items-center mb-2">
+                            <span 
+                              className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                apartment.matchScore >= 80 ? 'bg-green-100 text-green-800' : 
+                                apartment.matchScore >= 60 ? 'bg-yellow-100 text-yellow-800' : 
+                                'bg-gray-100 text-gray-800'
+                              }`}
+                            >
+                              <SparklesIcon className="h-3 w-3 inline mr-1" />
+                              {apartment.matchScore >= 80 ? 'Perfect Match' :
+                              apartment.matchScore >= 60 ? 'Good Match' :
+                              'Potential Match'}
+                              {` (${Math.round(apartment.matchScore)}%)`}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900 truncate flex-1 mr-2" title={apartment.title || 'Untitled'}>{apartment.title || 'Apartment Listing'}</h3>
+                          {apartment.price && (
+                            <span className="text-lg font-semibold text-homie whitespace-nowrap">€{apartment.price}/mo</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-500 text-sm mb-3 truncate">
+                          <MapPin className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate" title={`${apartment.subdistrict}, ${apartment.district}`}>
+                            {apartment.subdistrict || 'Unknown Sub'}, {apartment.district || 'Unknown District'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mb-3">
+                          {apartment.bedrooms !== null && (
+                            <div className="flex items-center gap-1">
+                              <BedDouble className="h-4 w-4 text-gray-500" />
+                              <span>{apartment.bedrooms === 0 ? 'Studio' : `${apartment.bedrooms} bed${apartment.bedrooms !== 1 ? 's' : ''}`}</span>
+                            </div>
+                          )}
+                          {apartment.bathrooms !== null && (
+                            <div className="flex items-center gap-1">
+                              <Bath className="h-4 w-4 text-gray-500" />
+                              <span>{apartment.bathrooms} bath${apartment.bathrooms !== 1 ? 's' : ''}</span>
+                            </div>
+                          )}
+                          {apartment.floor_built !== null && (
+                            <div className="flex items-center gap-1">
+                              <Home className="h-4 w-4 text-gray-500" />
+                              <span>{apartment.floor_built} m²</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-auto">
+                          <Link href={`/listing/${apartment.web_id}`} passHref legacyBehavior>
+                            <Button asChild className="w-full">
+                              <a>View Details</a>
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
 
+              {/* Load More Button (Conditional) */}
+              {!loading && !error && listings.length < totalListings && (!isAuthenticated || !user?.lifestyle) && (
+                <div className="mt-8 flex justify-center">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleLoadMore} 
+                    className="px-8" 
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : null}
+                    {loadingMore ? 'Loading...' : 'Load More'}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </main>
+
+        {/* Profile Modal */}
+        <ProfileModal 
+          isOpen={isProfileModalOpen} 
+          onClose={handleCloseProfileModal} 
+          source="signup"
+        />
       </div>
-
-      {/* Floating Chatbot Button */}
-      {!isChatbotOpen && (
-        <Button 
-          onClick={openChatbot}
-          className="fixed bottom-6 right-6 bg-homie hover:bg-homie-dark rounded-full w-14 h-14 shadow-lg z-40 flex items-center justify-center"
-          size="icon"
-        >
-          <MessageSquare className="h-6 w-6 text-white" />
-        </Button>
-      )}
-
-      {/* Chatbot Panel */}
-      <Chatbot
-        isOpen={isChatbotOpen}
-        onClose={closeChatbot}
-        onSearchUpdate={handleChatbotSearchUpdate}
+      
+      {/* Chatbot & Toggle Button */}
+      <Chatbot 
+        isOpen={isChatbotOpen} 
+        onClose={closeChatbot} 
+        onSearchUpdate={handleChatbotSearchUpdate} 
       />
-
+      
+      {/* Chatbot toggle button */}
+      <button 
+        className="fixed bottom-6 right-6 p-4 bg-homie text-white rounded-full shadow-lg hover:bg-homie-dark z-50"
+        onClick={openChatbot}
+      >
+        <MessageSquare className="h-6 w-6" />
+      </button>
     </div>
-  )
+  );
 } 

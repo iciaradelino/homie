@@ -1,7 +1,8 @@
 {
-  "/not-found": "app/not-found.js",
   "/search/page": "app/search/page.js",
+  "/listing/[id]/page": "app/listing/[id]/page.js",
+  "/api/recommendations/route": "app/api/recommendations/route.js",
+  "/api/explain-match/route": "app/api/explain-match/route.js",
   "/api/listings/route": "app/api/listings/route.js",
-  "/page": "app/page.js",
-  "/api/explain-match/route": "app/api/explain-match/route.js"
+  "/page": "app/page.js"
 }

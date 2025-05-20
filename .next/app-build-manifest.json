@@ -16,10 +16,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/search/page.js"
     ],
-    "/not-found": [
+    "/listing/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/not-found.js"
+      "static/chunks/app/listing/[id]/page.js"
     ]
   }
 }

@@ -2,6 +2,31 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## How to Run This Project
+
+To get this project up and running on your local machine, follow these simple steps:
+
+1.  **Prerequisites:**
+
+    - Make sure you have [Node.js](https://nodejs.org/) installed. This will also install npm (Node Package Manager).
+
+2.  **Install Dependencies:**
+
+    - Open your terminal, navigate to the project directory, and run:
+      ```bash
+      npm install
+      ```
+    - This command installs all the necessary dependencies defined in the `package.json` file.
+
+3.  **Start the Development Server:**
+    - Once the dependencies are installed, you can start the development server by running:
+      ```bash
+      npm start
+      ```
+    - This will open the application in your default web browser at [http://localhost:3000](http://localhost:3000).
+
+The application will automatically reload if you make any changes to the source files.
+
 ## Available Scripts
 
 In the project directory, you can run:

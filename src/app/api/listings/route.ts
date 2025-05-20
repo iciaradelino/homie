@@ -195,7 +195,11 @@ export async function GET(request: NextRequest) {
     const filterValue = searchParams.get(param);
     if (filterValue === 'true') {
        console.log(`[API Filter] ${param} (${String(field)}) = true`);
-       data = data.filter(item => item[field] === true);
+       data = data.filter(item => {
+        const val = item[field];
+        // Check for boolean true, number 1, or string "true" (case-insensitive)
+        return val === true || val === 1 || (typeof val === 'string' && val.toLowerCase() === 'true');
+      });
     }
   });
 

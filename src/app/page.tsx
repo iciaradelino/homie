@@ -23,6 +23,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import ProfileModal from '@/components/ProfileModal'
+import LoginModal from '@/components/LoginModal'
+import UserAvatar from '@/components/UserAvatar'
+import { useUser } from '@/context/UserContext'
 
 // Update keys for common requirements based on API mapping
 type CommonRequirementKey =
@@ -38,6 +42,7 @@ type CommonRequirementKey =
 
 export default function HomePage() {
   const router = useRouter();
+  const { isAuthenticated } = useUser();
 
   // --- State Variables ---
   const [location, setLocation] = useState('');
@@ -55,6 +60,9 @@ export default function HomePage() {
     pool: false,
   });
   const [additionalRequirements, setAdditionalRequirements] = useState('');
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [profileModalSource, setProfileModalSource] = useState<'signup' | 'search'>('signup');
 
   // --- Handlers ---
   const handleCommonRequirementChange = (key: CommonRequirementKey, checked: boolean) => {
@@ -62,6 +70,13 @@ export default function HomePage() {
   };
 
   const handleSearch = () => {
+    if (!isAuthenticated) {
+      // If not signed in, open profile modal
+      setProfileModalSource('search');
+      setIsProfileModalOpen(true);
+      return;
+    }
+
     const params = new URLSearchParams();
 
     if (location) params.set('location', location);
@@ -83,6 +98,24 @@ export default function HomePage() {
     router.push(`/search?${params.toString()}`);
   };
 
+  const handleSignUpClick = () => {
+    setProfileModalSource('signup');
+    setIsProfileModalOpen(true);
+  };
+
+  const handleLoginClick = () => {
+    setIsLoginModalOpen(true);
+  };
+
+  // --- Modal Handlers ---
+  const handleCloseProfileModal = () => {
+    setIsProfileModalOpen(false);
+  };
+
+  const handleCloseLoginModal = () => {
+    setIsLoginModalOpen(false);
+  };
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
@@ -100,8 +133,24 @@ export default function HomePage() {
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="#" className="text-sm font-medium hover:text-homie">Sign In</Link>
-            <Button className="bg-homie text-white hover:bg-homie-dark">Sign Up</Button>
+            {isAuthenticated ? (
+              <UserAvatar />
+            ) : (
+              <>
+                <button 
+                  className="text-sm font-medium hover:text-homie"
+                  onClick={handleLoginClick}
+                >
+                  Log In
+                </button>
+                <Button 
+                  className="bg-homie text-white hover:bg-homie-dark" 
+                  onClick={handleSignUpClick}
+                >
+                  Sign Up
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -407,6 +456,20 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        {/* Profile Modal */}
+        <ProfileModal 
+          isOpen={isProfileModalOpen} 
+          onClose={handleCloseProfileModal} 
+          source={profileModalSource}
+        />
+
+        {/* Login Modal */}
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={handleCloseLoginModal}
+          onSignUpClick={handleSignUpClick}
+        />
       </main>
       <footer className="border-t bg-white py-8">
         <div className="container">
